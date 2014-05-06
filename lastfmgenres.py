@@ -1,15 +1,17 @@
 #
 # http://www.last.fm/api/show/geo.getTopTracks
 #
-from pprint import pprint
 import urllib.request
 import urllib.parse
 import urllib.error
-import inspect
+import time
+import sys
 try:
 	import json
 except ImportError:
 	import simplejson as json
+
+MIN_PLAYCOUNT = 3
 
 lastfm_errors = {
 		1  : "This error does not exist",
@@ -59,81 +61,69 @@ class LastFM:
 		  "format":   "json"
 		})
 		try:
+			sys.stdout.flush()
 			#Create an API Request
 			url = self.API_URL + "?" + urllib.parse.urlencode(kwargs)
 			#Send Request and Collect it
 			data = urllib.request.urlopen( url )
 			result = data.read().decode('utf-8')
+			#Close connection
 			data.close()
-			#Print it
+			time.sleep(1) # Not to excide request per second limit (which is 1).
+
 			response_data = json.loads( result )
 			if "error" in response_data:
 				print(lastfm_error(response_data["error"]));
 				return None
-			#Close connection
 			return response_data
 		except urllib.error.HTTPError as e:
 			print("HTTP error: {0}".format(e.code))
 		except urllib.error.URLError as e:
 			print("Network error: {0}".format(e.reason.args[1]))
 
-	def get_top_artists(self, method, dict ):
-		#find the key		  
+	def get_library_artists(self, username):
 		args = {
-			"method":	method,
-			"limit":	3
-		}
-		for key in dict.keys():
-			args[key] = dict[key]
-		
-		response_data = self.send_request( args )
-		if response_data is None:
-			return
-		
-		print("~~~~~~~~~~~~~~" + str( args["method"] ) + "~~~~~~~~~~~~~~")
-		
-		#Get the first artist from the JSON response and print their name
-		for artist in response_data["topartists"]["artist"]:
-			print(artist["name"])
-		
-	def get_hyped_artists(self, method ):
+				"method":	'library.getartists',
+				"user": username,
+				"page": 1
+				}
+		total_page_count = 1
+		artists = []
+		while args["page"] <= total_page_count:
+			response_data = self.send_request( args )
+			if response_data is None:
+				return
+			total_page_count = int(response_data["artists"]["@attr"]["totalPages"])
+			print("Fetched page {0} out of {1}".format(args["page"], total_page_count))
+			args["page"] += 1
+			for artist in response_data["artists"]["artist"]:
+				if int(artist["tagcount"]) == 0 and int(artist["playcount"]) >= MIN_PLAYCOUNT:
+					artists.append(artist)
+
+		return [artist["name"] for artist in artists]
+		#for artist in artists:
+		#	print("Artist: {0}. Plays: {1}, tags: {2}".format(artist["name"], artist["playcount"], artist["tagcount"]))
+	
+	def get_artist_top_tags(self, artist):
 		args = {
-				"method":	method,
-				"limit":	3
+				"method":	'artist.gettoptags',
+				"artist": artist
 				}
 		response_data = self.send_request( args )
 		if response_data is None:
 			return
-		print("~~~~~~~~~~~~~~" + str( args["method"] ) +"~~~~~~~~~~~~~~")
-		#Get the first artist from the JSON response and print their name
-		for artist in response_data["artists"]["artist"]:
-			print(artist["name"])
-		
-	def get_similar_tracks(self, method, dict ):
-		args = {
-		  "method":	method,
-		  "limit":	3
-		}
-		for key in dict.keys():
-			args[key] = dict[key]
-			print(key, dict[key])
-		
-		response_data = self.send_request( args )
-		if response_data is None:
-			return
-		print("~~~~~~~~~~~~~~" + str( args["method"] ) +"~~~~~~~~~~~~~~")
-		#Get the first artist from the JSON response and print their name
-
-		for artist in response_data["similartracks"]["track"]:
-			print(artist["name"], artist["artist"]["name"])
+		tags = response_data["toptags"]
+		if "tag" not in tags:
+			return []
+		tags = tags["tag"]
+		if type(tags) is dict:
+			return[tags["name"]]
+		return [tag["name"] for tag in tags]
 
 def main():
-	last_request = LastFM()
-	last_request.get_top_artists( "tag.gettopartists", { "tag": "rock" } )
-	last_request.get_top_artists( "geo.gettopartists", { "country": "spain" } )
-	last_request.get_hyped_artists( "chart.getHypedArtists" )
-	last_request.get_similar_tracks( "track.getsimilar", {
-									"track": "Ray of Light",
-									"artist": "Madonna"})
+	lastfm = LastFM()
+	for artist in lastfm.get_library_artists('reddeadheat'):
+		print(artist, lastfm.get_artist_top_tags(artist))
 
-if __name__ == "__main__": main()
+if __name__ == "__main__":
+	main()
