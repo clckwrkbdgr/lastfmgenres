@@ -92,7 +92,8 @@ class LastFM:
 		while args["page"] <= total_page_count:
 			response_data = self.send_request( args )
 			if response_data is None:
-				return
+				print('Retrieving page {0} of artist library for user {1} failed.'.format(args["page"], username))
+				return []
 			total_page_count = int(response_data["artists"]["@attr"]["totalPages"])
 			print("Fetched page {0} out of {1}".format(args["page"], total_page_count))
 			args["page"] += 1
@@ -101,8 +102,6 @@ class LastFM:
 					artists.append(artist)
 
 		return [artist["name"] for artist in artists]
-		#for artist in artists:
-		#	print("Artist: {0}. Plays: {1}, tags: {2}".format(artist["name"], artist["playcount"], artist["tagcount"]))
 	
 	def get_artist_top_tags(self, artist):
 		args = {
@@ -111,7 +110,8 @@ class LastFM:
 				}
 		response_data = self.send_request( args )
 		if response_data is None:
-			return
+			print('Retrieving top tags for artist {1} failed.'.format(artist))
+			return []
 		tags = response_data["toptags"]
 		if "tag" not in tags:
 			return []
@@ -121,9 +121,30 @@ class LastFM:
 		return [tag["name"] for tag in tags]
 
 def main():
+	if len(sys.argv) < 2:
+		print("Usage: lastfmgenres.py <username>")
+		return
+	username = sys.argv[1]
 	lastfm = LastFM()
-	for artist in lastfm.get_library_artists('reddeadheat'):
-		print(artist, lastfm.get_artist_top_tags(artist))
+	artists = lastfm.get_library_artists(username)
+	current, total = 0, len(artists)
+	if total <= 0:
+		print('No artists to tag.')
+		return
+	print('Fetching...', end='')
+	with open(username + '.txt', 'w') as f:
+		f.write('# The format is: "<artist>":<tag>,<tag>,...\n')
+		f.write('# It should not be changed.\n')
+		f.write('# You can safely remove any artist (as whole line) or any tag.\n')
+		f.write('# Of course, you can add new tags (and even artists).\n')
+		f.write('# Just remember that tags are separated by commas and each new line represents separate artist.\n')
+		for artist in artists:
+			tags = lastfm.get_artist_top_tags(artist)
+			f.write('"{0}":{1}\n'.format(artist, ','.join(tags)))
+			print('\rArtist {0} of {1}.'.format(current + 1, total), end='')
+			current += 1
+	print('\rNow go edit file {0}.txt'.format(username))
+	
 
 if __name__ == "__main__":
 	main()
