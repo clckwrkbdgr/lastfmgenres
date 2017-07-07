@@ -49,7 +49,7 @@ def lastfm_error(error_code):
 
 class LastFM:
 	def __init__(self ):
-		self.API_URL = "http://ws.audioscrobbler.com/2.0/"
+		self.API_URL = "https://ws.audioscrobbler.com/2.0/"
 		self.API_KEY = "a79472b2278b802963f190166498c59d"
 	
 	def send_request(self, args, **kwargs):
